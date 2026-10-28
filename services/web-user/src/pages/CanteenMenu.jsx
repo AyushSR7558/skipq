@@ -15,20 +15,38 @@ export default function CanteenMenu() {
 
   // Review Modal State
   const [reviewItem, setReviewItem] = useState(null);
-  const [reviews, setReviews] = useState([]);
+  const [reviews, setReviews] = useState([]); 
+  const [canReview, setCanReview] = useState(false); 
   const [newReview, setNewReview] = useState({ rating: 5, comment: "" });
   const [loadingReviews, setLoadingReviews] = useState(false);
 
   // Cart State
-  const [cart, setCart] = useState(() =>
-    JSON.parse(localStorage.getItem("skipq_cart") || "{}")
-  );
+  const [cart, setCart] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("skipq_cart") || "{}");
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     // Fetch Menu
-    api.get(`/menu/canteen/${id}`).then((r) => setMenu(r.data));
+    api.get(`/menu/canteen/${id}`)
+      .then((r) => {
+        if (Array.isArray(r.data)) setMenu(r.data);
+        else setMenu([]);
+      })
+      .catch((err) => {
+        console.error("Failed to load menu", err);
+        setMenu([]);
+      });
+
     // Fetch Favorites
-    api.get(`/features/favorites`).then((r) => setFavorites(r.data.map(f => f.menu_item_id)));
+    api.get(`/features/favorites`)
+      .then((r) => {
+        if (Array.isArray(r.data)) setFavorites(r.data.map(f => f.menu_item_id));
+      })
+      .catch((err) => console.error("Failed to load favorites", err));
   }, [id]);
 
   useEffect(() => {
@@ -60,16 +78,16 @@ export default function CanteenMenu() {
     });
   };
 
-  const total = Object.values(cart).reduce(
-    (s, { finalPrice, qty }) => s + finalPrice * qty,
+  const total = Object.values(cart || {}).reduce(
+    (s, { finalPrice, qty }) => s + (Number(finalPrice) || 0) * (Number(qty) || 0),
     0
   );
 
   const checkout = () => {
-    const items = Object.values(cart).map(({ item, qty, extras }) => ({
+    const items = Object.values(cart || {}).map(({ item, qty, extras }) => ({
       menuItemId: item.id,
       quantity: qty,
-      customizations: extras.map(e => e.id)
+      customizations: (extras || []).map(e => e.id)
     }));
     if (!items.length) return;
     localStorage.setItem("skipq_checkout", JSON.stringify({ canteenId: Number(id), items }));
@@ -91,10 +109,10 @@ export default function CanteenMenu() {
   const handleAddClick = async (item) => {
     try {
       const { data } = await api.get(`/menu/item/${item.id}`);
-      if (data.customizations && data.customizations.length > 0) {
+      if (data && Array.isArray(data.customizations) && data.customizations.length > 0) {
         setCustomItem(data);
         setSelectedCustoms([]);
-        setCustomTotal(Number(data.price));
+        setCustomTotal(Number(data.price) || 0);
       } else {
         add(item);
       }
@@ -107,16 +125,16 @@ export default function CanteenMenu() {
     let newSelected;
     if (selectedCustoms.find(c => c.id === custom.id)) {
       newSelected = selectedCustoms.filter(c => c.id !== custom.id);
-      setCustomTotal(prev => prev - Number(custom.extra_price));
+      setCustomTotal(prev => prev - Number(custom.extra_price || 0));
     } else {
       newSelected = [...selectedCustoms, custom];
-      setCustomTotal(prev => prev + Number(custom.extra_price));
+      setCustomTotal(prev => prev + Number(custom.extra_price || 0));
     }
     setSelectedCustoms(newSelected);
   };
 
   const confirmCustomAdd = () => {
-    add(customItem, selectedCustoms, customTotal - Number(customItem.price));
+    add(customItem, selectedCustoms, customTotal - Number(customItem.price || 0));
     setCustomItem(null);
   };
 
@@ -124,16 +142,29 @@ export default function CanteenMenu() {
   const openReviews = async (item) => {
     setReviewItem(item);
     setLoadingReviews(true);
+    setReviews([]); 
     try {
       const { data } = await api.get(`/features/reviews/menu-item/${item.id}`);
-      setReviews(data);
+      
+      if (data && Array.isArray(data.reviews)) {
+        setReviews(data.reviews);
+        setCanReview(data.canReview);
+      } else if (Array.isArray(data)) {
+        setReviews(data);
+        setCanReview(true);
+      } else {
+        setReviews([]);
+        setCanReview(false);
+      }
     } catch (e) {
-      console.error("Failed to load reviews");
+      console.error("Failed to load reviews", e);
+      setReviews([]);
+      setCanReview(false);
     } finally {
       setLoadingReviews(false);
     }
-  };
-
+  };    
+    
   const submitReview = async (e) => {
     e.preventDefault();
     try {
@@ -145,11 +176,13 @@ export default function CanteenMenu() {
       });
       // Reload reviews to show the new one
       const { data } = await api.get(`/features/reviews/menu-item/${reviewItem.id}`);
-      setReviews(data);
+      if (data && Array.isArray(data.reviews)) {
+        setReviews(data.reviews);
+      }
       setNewReview({ rating: 5, comment: "" });
       alert("Review submitted successfully!");
     } catch (e) {
-      alert("Failed to submit review");
+      alert(e.response?.data?.message || "Failed to submit review");
     }
   };
 
@@ -157,7 +190,7 @@ export default function CanteenMenu() {
     <div className="max-w-4xl mx-auto p-6 grid md:grid-cols-3 gap-6">
       <div className="md:col-span-2">
         <h1 className="text-2xl font-bold mb-4">Menu</h1>
-        {menu.map((m) => (
+        {(menu || []).map((m) => (
           <div key={m.id} className="border p-3 rounded mb-2 flex justify-between bg-white shadow-sm">
             <div>
               <div className="flex items-center gap-2">
@@ -171,7 +204,7 @@ export default function CanteenMenu() {
                 {/* C. Favorite Button */}
                 <button 
                   onClick={() => toggleFavorite(m.id)} 
-                  className={`text-xl ml-2 ${favorites.includes(m.id) ? 'text-red-500' : 'text-gray-300'}`}
+                  className={`text-xl ml-2 ${(favorites || []).includes(m.id) ? 'text-red-500' : 'text-gray-300'}`}
                 >
                   ♥
                 </button>
@@ -203,15 +236,15 @@ export default function CanteenMenu() {
 
       <aside className="border p-4 rounded h-fit bg-white shadow-sm sticky top-6">
         <h2 className="font-bold mb-2">Cart</h2>
-        {Object.values(cart).length === 0 && <p className="text-sm text-gray-500">Empty</p>}
+        {Object.values(cart || {}).length === 0 && <p className="text-sm text-gray-500">Empty</p>}
         
-        {Object.entries(cart).map(([key, { item, qty, extras, finalPrice }]) => (
+        {Object.entries(cart || {}).map(([key, { item, qty, extras, finalPrice }]) => (
           <div key={key} className="mb-3 border-b pb-2">
             <div className="flex justify-between text-sm font-semibold">
               <span>{item.name} × {qty}</span>
               <span>₹{finalPrice * qty}</span>
             </div>
-            {extras.length > 0 && (
+            {extras && extras.length > 0 && (
               <div className="text-xs text-gray-500">
                 + {extras.map(e => e.name).join(", ")}
               </div>
@@ -229,7 +262,7 @@ export default function CanteenMenu() {
         </div>
         <button
           onClick={checkout}
-          disabled={!Object.keys(cart).length}
+          disabled={!Object.keys(cart || {}).length}
           className="w-full mt-3 bg-green-600 hover:bg-green-700 text-white p-2 rounded disabled:opacity-50 font-bold"
         >
           Checkout
@@ -244,7 +277,7 @@ export default function CanteenMenu() {
             <p className="text-sm text-gray-500 mb-4">Select your add-ons</p>
             
             <div className="space-y-2 mb-4">
-              {customItem.customizations.map(c => (
+              {(customItem.customizations || []).map(c => (
                 <label key={c.id} className="flex items-center justify-between border p-2 rounded cursor-pointer hover:bg-gray-50">
                   <div className="flex items-center gap-2">
                     <input 
@@ -282,52 +315,62 @@ export default function CanteenMenu() {
               <button onClick={() => setReviewItem(null)} className="text-gray-500 hover:text-black text-2xl font-bold">×</button>
             </div>
 
-            {/* Existing Reviews */}
+            {/* EXISTING REVIEWS */}
             <div className="space-y-3 mb-6">
               {loadingReviews ? (
                 <p className="text-gray-500 text-sm">Loading reviews...</p>
-              ) : reviews.length === 0 ? (
-                <p className="text-gray-500 text-sm">No reviews yet. Be the first to review this item!</p>
               ) : (
-                reviews.map((r, i) => (
-                  <div key={i} className="border-b pb-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm">{r.user_name}</span>
-                      <span className="text-yellow-500 text-sm">
-                        {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
-                      </span>
+                Array.isArray(reviews) && reviews.length > 0 ? (
+                  reviews.map((r, i) => (
+                    <div key={i} className="border-b pb-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm">{r.user_name}</span>
+                        <span className="text-yellow-500 text-sm">
+                          {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-1">{r.comment}</p>
                     </div>
-                    <p className="text-sm text-gray-700 mt-1">{r.comment}</p>
-                  </div>
-                ))
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm">No reviews yet. Be the first to review this item!</p>
+                )
               )}
             </div>
 
-            {/* Write Review Form */}
-            <form onSubmit={submitReview} className="border-t pt-4">
-              <h3 className="font-bold mb-2">Write a Review</h3>
-              <select 
-                className="border p-2 rounded w-full mb-2" 
-                value={newReview.rating} 
-                onChange={e => setNewReview({...newReview, rating: Number(e.target.value)})}
-              >
-                <option value={5}>5 Stars - Excellent</option>
-                <option value={4}>4 Stars - Good</option>
-                <option value={3}>3 Stars - Average</option>
-                <option value={2}>2 Stars - Poor</option>
-                <option value={1}>1 Star - Terrible</option>
-              </select>
-              <textarea 
-                required 
-                className="border p-2 rounded w-full mb-2" 
-                placeholder="What did you think about this dish?" 
-                value={newReview.comment} 
-                onChange={e => setNewReview({...newReview, comment: e.target.value})} 
-              />
-              <button className="bg-orange-500 hover:bg-orange-600 text-white w-full p-2 rounded font-bold">
-                Submit Review
-              </button>
-            </form>
+            {/* WRITE REVIEW */}
+            {canReview ? (
+              <form onSubmit={submitReview} className="border-t pt-4">
+                <h3 className="font-bold mb-2">Write a Review</h3>
+                <select 
+                  className="border p-2 rounded w-full mb-2" 
+                  value={newReview.rating} 
+                  onChange={e => setNewReview({...newReview, rating: Number(e.target.value)})}
+                >
+                  <option value={5}>5 Stars - Excellent</option>
+                  <option value={4}>4 Stars - Good</option>
+                  <option value={3}>3 Stars - Average</option>
+                  <option value={2}>2 Stars - Poor</option>
+                  <option value={1}>1 Star - Terrible</option>
+                </select>
+                <textarea 
+                  required 
+                  className="border p-2 rounded w-full mb-2" 
+                  placeholder="What did you think about this dish?" 
+                  value={newReview.comment} 
+                  onChange={e => setNewReview({...newReview, comment: e.target.value})} 
+                />
+                <button className="bg-orange-500 hover:bg-orange-600 text-white w-full p-2 rounded font-bold">
+                  Submit Review
+                </button>
+              </form>
+            ) : (
+              <div className="border-t pt-4 text-center">
+                <p className="text-sm text-gray-500 bg-gray-100 p-3 rounded">
+                  🔒 You can only review this item after you have ordered it and picked it up from the canteen.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
