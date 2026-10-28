@@ -60,4 +60,16 @@ router.get("/reviews/canteen/:canteenId", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get("/reviews/menu-item/:menuItemId", async (req, res, next) => {
+  try {
+    const [rows] = await q(
+      `SELECT r.rating, r.comment, r.created_at, u.name as user_name
+       FROM reviews r JOIN users u ON u.id = r.user_id
+       WHERE r.menu_item_id = ? ORDER BY r.created_at DESC`,
+      [req.params.menuItemId]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
 export default router;

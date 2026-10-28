@@ -13,6 +13,12 @@ export default function CanteenMenu() {
   const [selectedCustoms, setSelectedCustoms] = useState([]);
   const [customTotal, setCustomTotal] = useState(0);
 
+  // Review Modal State
+  const [reviewItem, setReviewItem] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: "" });
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
   // Cart State
   const [cart, setCart] = useState(() =>
     JSON.parse(localStorage.getItem("skipq_cart") || "{}")
@@ -31,7 +37,6 @@ export default function CanteenMenu() {
 
   // --- CART LOGIC ---
   const add = (item, extras = [], extraPrice = 0) => {
-    // We create a unique key based on item ID + selected extras so the cart separates them
     const uniqueKey = `${item.id}-${extras.map(e => e.id).sort().join("-")}`;
     
     setCart((c) => ({
@@ -64,7 +69,7 @@ export default function CanteenMenu() {
     const items = Object.values(cart).map(({ item, qty, extras }) => ({
       menuItemId: item.id,
       quantity: qty,
-      customizations: extras.map(e => e.id) // Pass customizations to backend
+      customizations: extras.map(e => e.id)
     }));
     if (!items.length) return;
     localStorage.setItem("skipq_checkout", JSON.stringify({ canteenId: Number(id), items }));
@@ -84,7 +89,6 @@ export default function CanteenMenu() {
 
   // --- CUSTOMIZATION LOGIC ---
   const handleAddClick = async (item) => {
-    // We need to fetch the customizations for this specific item
     try {
       const { data } = await api.get(`/menu/item/${item.id}`);
       if (data.customizations && data.customizations.length > 0) {
@@ -92,10 +96,10 @@ export default function CanteenMenu() {
         setSelectedCustoms([]);
         setCustomTotal(Number(data.price));
       } else {
-        add(item); // No customizations, add directly
+        add(item);
       }
     } catch (e) {
-      add(item); // Fallback
+      add(item);
     }
   };
 
@@ -114,6 +118,39 @@ export default function CanteenMenu() {
   const confirmCustomAdd = () => {
     add(customItem, selectedCustoms, customTotal - Number(customItem.price));
     setCustomItem(null);
+  };
+
+  // --- REVIEW LOGIC ---
+  const openReviews = async (item) => {
+    setReviewItem(item);
+    setLoadingReviews(true);
+    try {
+      const { data } = await api.get(`/features/reviews/menu-item/${item.id}`);
+      setReviews(data);
+    } catch (e) {
+      console.error("Failed to load reviews");
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  const submitReview = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post("/features/reviews", {
+        canteenId: Number(id),
+        menuItemId: reviewItem.id,
+        rating: newReview.rating,
+        comment: newReview.comment
+      });
+      // Reload reviews to show the new one
+      const { data } = await api.get(`/features/reviews/menu-item/${reviewItem.id}`);
+      setReviews(data);
+      setNewReview({ rating: 5, comment: "" });
+      alert("Review submitted successfully!");
+    } catch (e) {
+      alert("Failed to submit review");
+    }
   };
 
   return (
@@ -142,6 +179,14 @@ export default function CanteenMenu() {
               
               <div className="text-sm text-gray-600">{m.description}</div>
               <div className="text-sm font-bold mt-1">₹{m.price} · {m.prep_time_min} min</div>
+              
+              {/* B. See Reviews Button */}
+              <button 
+                onClick={() => openReviews(m)}
+                className="text-xs text-blue-600 hover:underline mt-2 block"
+              >
+                See Reviews
+              </button>
             </div>
             
             <div className="flex items-center gap-2">
@@ -224,6 +269,65 @@ export default function CanteenMenu() {
               <button onClick={() => setCustomItem(null)} className="flex-1 border p-2 rounded hover:bg-gray-100">Cancel</button>
               <button onClick={confirmCustomAdd} className="flex-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600">Add to Cart</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* REVIEWS MODAL */}
+      {reviewItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-[500px] max-w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Reviews for {reviewItem.name}</h2>
+              <button onClick={() => setReviewItem(null)} className="text-gray-500 hover:text-black text-2xl font-bold">×</button>
+            </div>
+
+            {/* Existing Reviews */}
+            <div className="space-y-3 mb-6">
+              {loadingReviews ? (
+                <p className="text-gray-500 text-sm">Loading reviews...</p>
+              ) : reviews.length === 0 ? (
+                <p className="text-gray-500 text-sm">No reviews yet. Be the first to review this item!</p>
+              ) : (
+                reviews.map((r, i) => (
+                  <div key={i} className="border-b pb-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-sm">{r.user_name}</span>
+                      <span className="text-yellow-500 text-sm">
+                        {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-1">{r.comment}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Write Review Form */}
+            <form onSubmit={submitReview} className="border-t pt-4">
+              <h3 className="font-bold mb-2">Write a Review</h3>
+              <select 
+                className="border p-2 rounded w-full mb-2" 
+                value={newReview.rating} 
+                onChange={e => setNewReview({...newReview, rating: Number(e.target.value)})}
+              >
+                <option value={5}>5 Stars - Excellent</option>
+                <option value={4}>4 Stars - Good</option>
+                <option value={3}>3 Stars - Average</option>
+                <option value={2}>2 Stars - Poor</option>
+                <option value={1}>1 Star - Terrible</option>
+              </select>
+              <textarea 
+                required 
+                className="border p-2 rounded w-full mb-2" 
+                placeholder="What did you think about this dish?" 
+                value={newReview.comment} 
+                onChange={e => setNewReview({...newReview, comment: e.target.value})} 
+              />
+              <button className="bg-orange-500 hover:bg-orange-600 text-white w-full p-2 rounded font-bold">
+                Submit Review
+              </button>
+            </form>
           </div>
         </div>
       )}
