@@ -1,0 +1,63 @@
+import { Router } from "express";
+import { q } from "../../config/db.js";
+import { auth, requireRole } from "../../middleware/auth.js";
+
+const router = Router();
+
+// --- C. FAVORITES ---
+router.get("/favorites", auth, requireRole("USER"), async (req, res, next) => {
+  try {
+    const [rows] = await q(
+      `SELECT f.id, f.menu_item_id, m.name, m.price, m.canteen_id
+       FROM favorites f
+       JOIN menu_items m ON m.id = f.menu_item_id
+       WHERE f.user_id = ?`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+router.post("/favorites/:menuItemId", auth, requireRole("USER"), async (req, res, next) => {
+  try {
+    await q(`INSERT IGNORE INTO favorites (user_id, menu_item_id) VALUES (?, ?)`, [req.user.id, req.params.menuItemId]);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+router.delete("/favorites/:menuItemId", auth, requireRole("USER"), async (req, res, next) => {
+  try {
+    await q(`DELETE FROM favorites WHERE user_id = ? AND menu_item_id = ?`, [req.user.id, req.params.menuItemId]);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// --- B. REVIEWS (Placeholder for later) ---
+router.post("/reviews", auth, requireRole("USER"), async (req, res, next) => {
+  try {
+    const { canteenId, menuItemId, rating, comment } = req.body;
+    await q(
+      `INSERT INTO reviews (user_id, canteen_id, menu_item_id, rating, comment) VALUES (?, ?, ?, ?, ?)`,
+      [req.user.id, canteenId, menuItemId || null, rating, comment]
+    );
+
+    // Update canteen average rating
+    const [avg] = await q(`SELECT AVG(rating) as avg_rating FROM reviews WHERE canteen_id = ?`, [canteenId]);
+    await q(`UPDATE canteens SET average_rating = ? WHERE id = ?`, [avg[0].avg_rating, canteenId]);
+
+    res.status(201).json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+router.get("/reviews/canteen/:canteenId", async (req, res, next) => {
+  try {
+    const [rows] = await q(
+      `SELECT r.*, u.name as user_name FROM reviews r 
+       JOIN users u ON u.id = r.user_id WHERE r.canteen_id = ? ORDER BY r.created_at DESC`, 
+      [req.params.canteenId]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+export default router;

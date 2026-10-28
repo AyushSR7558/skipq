@@ -32,6 +32,7 @@ export default function Navbar() {
         {user ? (
           <>
             <Link to="/orders">My Orders</Link>
+            <Link to="/favorites">Favorites ♥</Link> 
             <Link to="/notifications" className="relative">
               🔔
               {unread > 0 && (

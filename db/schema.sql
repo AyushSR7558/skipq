@@ -89,3 +89,46 @@ CREATE TABLE notifications (
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
   INDEX idx_notif_user (user_id, is_read, created_at)
 );
+
+ALTER TABLE menu_items ADD COLUMN is_veg TINYINT(1) DEFAULT 1;
+ALTER TABLE canteens ADD COLUMN average_rating DECIMAL(3,2) DEFAULT 0.00;
+
+CREATE TABLE customizations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  menu_item_id INT NOT NULL,
+  name VARCHAR(100) NOT NULL, -- e.g., "Extra Cheese", "Spicy"
+  extra_price DECIMAL(10,2) DEFAULT 0.00,
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+);
+
+CREATE TABLE order_customizations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_item_id INT NOT NULL,
+  customization_id INT NOT NULL,
+  price_at_order DECIMAL(10,2) NOT NULL,
+  FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (customization_id) REFERENCES customizations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  canteen_id INT NOT NULL,
+  menu_item_id INT NULL,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (canteen_id) REFERENCES canteens(id) ON DELETE CASCADE,
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+);
+
+CREATE TABLE favorites (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  menu_item_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_user_favorite (user_id, menu_item_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+);

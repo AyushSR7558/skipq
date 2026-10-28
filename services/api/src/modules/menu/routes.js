@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { q } from "../../config/db.js";
+import { q, pool } from "../../config/db.js";
 import { auth, requireRole } from "../../middleware/auth.js";
 
 const router = Router();
@@ -86,6 +86,59 @@ router.delete("/:id", requireRole("STAFF", "ADMIN"), async (req, res, next) => {
       return res.status(409).json({ message: "Item is used in past orders — mark unavailable instead" });
     next(e);
   }
+});
+
+// Add this new route to get a single item with its customizations
+router.get("/item/:id", async (req, res, next) => {
+  try {
+    const [items] = await q(`SELECT * FROM menu_items WHERE id = ?`, [req.params.id]);
+    if (!items.length) return res.status(404).json({ message: "Item not found" });
+
+    const [customs] = await q(`SELECT * FROM customizations WHERE menu_item_id = ?`, [req.params.id]);
+    res.json({ ...items[0], customizations: customs });
+  } catch (e) { next(e); }
+});
+
+// Update the POST route to handle customizations when adding an item
+router.post("/", requireRole("STAFF", "ADMIN"), async (req, res, next) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { name, description, price, categoryId, prepTimeMin, isVeg, customizations } = req.body;
+
+    const [r] = await conn.query(
+      `INSERT INTO menu_items (name, description, price, category_id, prep_time_min, is_veg, canteen_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, price, categoryId, prepTimeMin, isVeg ? 1 : 0, req.user.canteenId]
+    );
+    const itemId = r.insertId;
+
+    // Insert customizations if provided
+    if (customizations && customizations.length > 0) {
+      for (const c of customizations) {
+        await conn.query(
+          `INSERT INTO customizations (menu_item_id, name, extra_price) VALUES (?, ?, ?)`,
+          [itemId, c.name, c.extraPrice]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.status(201).json({ id: itemId });
+  } catch (e) {
+    await conn.rollback();
+    next(e);
+  } finally { conn.release(); }
+});
+
+router.get("/item/:id", async (req, res, next) => {
+  try {
+    const [items] = await q(`SELECT * FROM menu_items WHERE id = ?`, [req.params.id]);
+    if (!items.length) return res.status(404).json({ message: "Item not found" });
+
+    const [customs] = await q(`SELECT * FROM customizations WHERE menu_item_id = ?`, [req.params.id]);
+    res.json({ ...items[0], customizations: customs });
+  } catch (e) { next(e); }
 });
 
 export default router;

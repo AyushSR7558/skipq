@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import Favorites from "./pages/Favorites";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
@@ -36,6 +37,11 @@ export default function App() {
           path="/notifications"
           element={<ProtectedRoute><Notifications /></ProtectedRoute>}
         />
+        <Route
+         path="/favorites"
+         element={<ProtectedRoute><Favorites /></ProtectedRoute>}
+        />
+
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
