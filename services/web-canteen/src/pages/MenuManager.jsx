@@ -34,7 +34,8 @@ export default function MenuManager() {
         ...form,
         price: Number(form.price),
         prepTimeMin: Number(form.prepTimeMin),
-        customizations: customs, // Send to backend
+        isVeg: form.isVeg === true, 
+        customizations: customs, 
       });
       // Reset form
       setForm({ name: "", price: "", description: "", prepTimeMin: 10, categoryId: 1, isVeg: true });
@@ -47,6 +48,12 @@ export default function MenuManager() {
 
   const toggleAvailable = async (item) => {
     await api.patch(`/menu/${item.id}`, { is_available: item.is_available ? 0 : 1 });
+    load();
+  };
+
+  // --- NEW: TOGGLE VEG/NON-VEG ---
+  const toggleVeg = async (item) => {
+    await api.patch(`/menu/${item.id}`, { is_veg: item.is_veg ? 0 : 1 });
     load();
   };
 
@@ -77,10 +84,12 @@ export default function MenuManager() {
           <option value={3}>Beverages</option>
         </select>
 
-        {/* VEG TOGGLE */}
-        <label className="flex items-center gap-2 border p-2 rounded cursor-pointer">
+        {/* VEG TOGGLE IN FORM */}
+        <label className="flex items-center gap-2 border p-2 rounded cursor-pointer bg-gray-50">
           <input type="checkbox" checked={form.isVeg} onChange={e => setForm({...form, isVeg: e.target.checked})} />
-          Is Vegetarian?
+          <span className={form.isVeg ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+            {form.isVeg ? "Vegetarian" : "Non-Vegetarian"}
+          </span>
         </label>
 
         {/* CUSTOMIZATIONS SECTION */}
@@ -115,10 +124,16 @@ export default function MenuManager() {
             <div className="text-gray-600 text-sm mb-2">{item.description}</div>
             <div className="font-bold">₹{item.price}</div>
             
-            <div className="flex gap-2 mt-4 text-sm">
+            <div className="flex flex-wrap gap-2 mt-4 text-sm">
+              {/* NEW: TOGGLE VEG BUTTON */}
+              <button onClick={() => toggleVeg(item)} className="border px-2 py-1 rounded">
+                Toggle Veg/Non-Veg
+              </button>
+              
               <button onClick={() => toggleAvailable(item)} className="border px-2 py-1 rounded">
                 {item.is_available ? "Mark Unavailable" : "Mark Available"}
               </button>
+              
               <button onClick={() => removeItem(item.id)} className="text-red-600 border border-red-600 px-2 py-1 rounded">
                 Delete
               </button>

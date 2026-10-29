@@ -73,15 +73,23 @@ router.post("/", requireRole("STAFF", "ADMIN"), async (req, res, next) => {
 // Staff: update
 router.patch("/:id", requireRole("STAFF", "ADMIN"), async (req, res, next) => {
   try {
-    const fields = ["name", "description", "price", "category_id", "prep_time_min", "is_available", "image_url"];
+    // ADD "is_veg" TO THIS ARRAY
+    const fields = ["name", "description", "price", "category_id", "prep_time_min", "is_available", "image_url", "is_veg"];
     const updates = [];
     const params = [];
+    
     for (const f of fields) {
       if (req.body[f] !== undefined) {
         updates.push(`${f} = ?`);
-        params.push(req.body[f]);
+        // If it's is_veg or is_available, ensure it's a 1 or 0 for MySQL
+        if (f === "is_veg" || f === "is_available") {
+          params.push(req.body[f] ? 1 : 0);
+        } else {
+          params.push(req.body[f]);
+        }
       }
     }
+    
     if (!updates.length) return res.status(400).json({ message: "Nothing to update" });
     params.push(req.params.id, req.user.canteenId);
 
