@@ -8,32 +8,41 @@ export default function MenuManager() {
   const [form, setForm] = useState({ 
     name: "", price: "", description: "", prepTimeMin: 10, categoryId: 1, isVeg: true 
   });
-  const [customs, setCustoms] = useState([]); // Customizations array
+  
+  // Customizations State
+  const [customs, setCustoms] = useState([]);
 
   const load = () => api.get("/menu/my-canteen").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
 
-  // Customization handlers
+  // --- CUSTOMIZATION HANDLERS ---
   const addCustomField = () => setCustoms([...customs, { name: "", extraPrice: 0 }]);
+  
   const updateCustom = (index, field, value) => {
     const newCustoms = [...customs];
     newCustoms[index][field] = value;
     setCustoms(newCustoms);
   };
+  
   const removeCustom = (index) => setCustoms(customs.filter((_, i) => i !== index));
 
+  // --- SUBMIT FORM ---
   const addItem = async (e) => {
     e.preventDefault();
-    await api.post("/menu", {
-      ...form,
-      price: Number(form.price),
-      prepTimeMin: Number(form.prepTimeMin),
-      customizations: customs, // Send to backend
-    });
-    // Reset form
-    setForm({ name: "", price: "", description: "", prepTimeMin: 10, categoryId: 1, isVeg: true });
-    setCustoms([]);
-    load();
+    try {
+      await api.post("/menu", {
+        ...form,
+        price: Number(form.price),
+        prepTimeMin: Number(form.prepTimeMin),
+        customizations: customs, // Send to backend
+      });
+      // Reset form
+      setForm({ name: "", price: "", description: "", prepTimeMin: 10, categoryId: 1, isVeg: true });
+      setCustoms([]);
+      load();
+    } catch (err) {
+      alert("Failed to add item: " + (err.response?.data?.message || err.message));
+    }
   };
 
   const toggleAvailable = async (item) => {
@@ -82,6 +91,7 @@ export default function MenuManager() {
               + Add Option
             </button>
           </div>
+          {customs.length === 0 && <p className="text-sm text-gray-500">No add-ons yet.</p>}
           {customs.map((c, i) => (
             <div key={i} className="flex gap-2 mb-2">
               <input placeholder="Option Name (e.g. Extra Cheese)" className="border p-2 rounded flex-1" value={c.name} onChange={(e) => updateCustom(i, 'name', e.target.value)} />

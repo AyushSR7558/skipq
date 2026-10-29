@@ -106,21 +106,25 @@ export default function CanteenMenu() {
   };
 
   // --- CUSTOMIZATION LOGIC ---
-  const handleAddClick = async (item) => {
+      const handleAddClick = async (item) => {
     try {
       const { data } = await api.get(`/menu/item/${item.id}`);
+      
+      // If the backend returns customizations, open the modal
       if (data && Array.isArray(data.customizations) && data.customizations.length > 0) {
         setCustomItem(data);
         setSelectedCustoms([]);
         setCustomTotal(Number(data.price) || 0);
       } else {
+        // If NO customizations, add the item directly to the cart!
         add(item);
       }
     } catch (e) {
-      add(item);
+      // If the API fails entirely, still add the item so the user isn't stuck
+      console.error("Failed to fetch item details", e);
+      add(item); 
     }
   };
-
   const toggleCustom = (custom) => {
     let newSelected;
     if (selectedCustoms.find(c => c.id === custom.id)) {

@@ -34,16 +34,40 @@ router.get("/my-canteen", requireRole("STAFF", "ADMIN"), async (req, res, next) 
 
 // Staff: add
 router.post("/", requireRole("STAFF", "ADMIN"), async (req, res, next) => {
+  const conn = await pool.getConnection();
   try {
-    const { name, description, price, categoryId, prepTimeMin, imageUrl } = req.body;
-    const [r] = await q(
+    await conn.beginTransaction();
+    const { name, description, price, categoryId, prepTimeMin, imageUrl, isVeg, customizations } = req.body;
+    
+    // 1. Insert the main menu item
+    const [r] = await conn.query(
       `INSERT INTO menu_items
-        (name, description, price, category_id, prep_time_min, image_url, canteen_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [name, description ?? null, price, categoryId, prepTimeMin ?? 10, imageUrl ?? null, req.user.canteenId]
+        (name, description, price, category_id, prep_time_min, image_url, is_veg, canteen_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description ?? null, price, categoryId, prepTimeMin ?? 10, imageUrl ?? null, isVeg ? 1 : 0, req.user.canteenId]
     );
-    res.status(201).json({ id: r.insertId });
-  } catch (e) { next(e); }
+    const itemId = r.insertId;
+
+    // 2. Insert the customizations (if any were provided)
+    if (customizations && Array.isArray(customizations) && customizations.length > 0) {
+      for (const c of customizations) {
+        if (c.name && c.name.trim() !== "") {
+          await conn.query(
+            `INSERT INTO customizations (menu_item_id, name, extra_price) VALUES (?, ?, ?)`,
+            [itemId, c.name, c.extraPrice || 0]
+          );
+        }
+      }
+    }
+
+    await conn.commit();
+    res.status(201).json({ id: itemId });
+  } catch (e) {
+    await conn.rollback();
+    next(e);
+  } finally {
+    conn.release();
+  }
 });
 
 // Staff: update
